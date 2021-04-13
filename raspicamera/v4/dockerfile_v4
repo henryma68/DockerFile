@@ -1,0 +1,95 @@
+FROM balenalib/raspberrypi3-debian:buster
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV READTHEDOCS True
+ENV NODE_OPTIONS "--max-old-space-size=2048"
+
+
+#do installation
+RUN apt-get update \
+    && apt-get upgrade \
+    && apt-get install -y --no-install-recommends openssh-server \
+    && apt-get install -y tzdata git python3-pip python3-numpy wget \
+    && apt-get autoremove \
+    && apt-get -y install git \
+#do users
+    && echo 'root:root' | chpasswd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd \
+    && mkdir /var/run/sshd
+	
+	
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && ln -fs /usr/share/zoneinfo/Asia/Taiwan /etc/localtime \
+    && dpkg-reconfigure --frontend noninteractive tzdata
+    
+    
+RUN pip3 install -U pip
+RUN python3 -m pip install --upgrade setuptools
+RUN pip install numpy 
+#RUN python setup.py instll
+#RUN pip install xgboost   
+
+#python libraries
+RUN python3 -m pip install --no-cache-dir -U grpcio absl-py py-cpuinfo psutil portpicker grpcio six mock requests gast astor termcolor \
+    && python3 -m pip install grpcio grpcio-tools \
+    && python3 -m pip install  --upgrade --force-reinstall pyzmq \
+    && python3 -m pip install supervisor tornado python-periphery \
+    && python3 -m pip install google-auth oauthlib imutils matplotlib    
+    
+#opencv C intsall
+
+#essential opencv lib
+RUN apt-get install build-essential \
+    && apt-get install cmake git libgtk2.0-dev pkg-config \
+    && apt-get install libavcodec-dev libavformat-dev libswscale-dev \
+    && apt-get install libgtk-3-dev 
+
+#related opencv lib    
+RUN apt-get install libjpeg-dev libtiff5-dev libjasper-dev libpng12-dev \
+    && apt-get install libavcodec-dev libavformat-dev libswscale-dev libv4l-dev \
+    && apt-get install libxvidcore-dev libx264-dev \
+    && apt-get install libgdk-pixbuf2.0-dev libpango1.0-dev \
+    && apt-get install libatlas-base-dev gfortran \
+    && apt-get install python-dev python3-dev
+    
+RUN git clone https://github.com/opencv/opencv.git
+
+WORKDIR opencv
+
+RUN ls
+#RUN git checkout 4.1.1
+
+RUN git clone https://github.com/opencv/opencv_contrib.git
+WORKDIR opencv_contrib
+#RUN git checkout 4.1.1   
+
+WORKDIR opencv
+RUN mkdir build
+RUN ls
+
+WORKDIR /opencv/build  
+
+RUN ls
+
+RUN cmake -D CMAKE_BUILD_TYPE=Release \
+-D CMAKE_INSTALL_PREFIX=/usr/local \
+-D OPENCV_EXTRA_MODULES_PATH=../opencv_contrib/modules \
+-D BUILD_opencv_python2=ON \
+-D BUILD_opencv_python3=ON \
+-D INSTALL_PYTHON_EXAMPLES=OFF \
+-D INSTALL_C_EXAMPLES=OFF \
+-D BUILD_EXAMPLES=OFF \
+-D ENABLE_NEON=ON \
+-D ENABLE_VFPV3=ON \
+-D OPENCV_ENABLE_NONFREE=ON \
+-D CMAKE_SHARED_LINKER_FLAGS=-latomic \
+-D OPENCV_GENERATE_PKGCONFIG=YES ..
+
+RUN make -j4
+RUN make install
+RUN ldconfig
+
+  
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
