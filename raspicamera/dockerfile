@@ -1,0 +1,60 @@
+FROM balenalib/raspberrypi3-debian:buster
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV READTHEDOCS True
+ENV NODE_OPTIONS "--max-old-space-size=2048"
+
+
+#do installation
+RUN apt-get update \
+    && apt-get upgrade \
+    && apt-get install -y --no-install-recommends openssh-server \
+    && apt-get install -y tzdata git python3-pip python3-numpy wget \
+    && apt-get autoremove \
+    && apt-get -y install git \
+#do users
+    && echo 'root:root' | chpasswd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd \
+    && mkdir /var/run/sshd
+	
+	
+RUN export DEBIAN_FRONTEND=noninteractive \
+    && ln -fs /usr/share/zoneinfo/Asia/Taiwan /etc/localtime \
+    && dpkg-reconfigure --frontend noninteractive tzdata
+    
+    
+RUN pip3 install -U pip
+RUN python3 -m pip install --upgrade setuptools
+RUN pip install numpy 
+#RUN python setup.py instll
+#RUN pip install xgboost  
+
+#Edge TPU
+RUN echo "deb https://packages.cloud.google.com/apt coral-edgetpu-stable main" | sudo tee /etc/apt/sources.list.d/coral-edgetpu.list
+
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+RUN apt-get update
+RUN apt-get install libedgetpu1-std 
+RUN apt-get install python3-pycoral 
+RUN mkdir coral 
+WORKDIR /coral
+RUN git clone https://github.com/google-coral/pycoral
+WORKDIR pycoral
+RUN bash examples/install_requirements.sh
+
+#python libraries
+RUN python3 -m pip install --no-cache-dir -U grpcio absl-py py-cpuinfo psutil portpicker grpcio six mock requests gast astor termcolor \
+    && python3 -m pip install grpcio==1.33.1 grpcio-tools==1.33.1 \
+    && python3 -m pip install  --upgrade --force-reinstall pyzmq \
+    && python3 -m pip install supervisor tornado python-periphery \
+    && python3 -m pip install google-auth oauthlib imutils matplotlib  
+
+#insatll Lib   
+    
+COPY Demo_v2 /root/Demo_v2
+
+  
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
